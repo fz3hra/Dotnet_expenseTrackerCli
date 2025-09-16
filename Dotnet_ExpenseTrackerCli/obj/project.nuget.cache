@@ -1,8 +1,10 @@
 {
   "version": 2,
-  "dgSpecHash": "g/t4S10N2Uk=",
+  "dgSpecHash": "Sp6W+I1qxAY=",
   "success": true,
   "projectFilePath": "/Users/fz3hra/Desktop/code/self/Dotnet_ExpenseTrackerCli/Dotnet_ExpenseTrackerCli/Dotnet_ExpenseTrackerCli.csproj",
-  "expectedPackageFiles": [],
+  "expectedPackageFiles": [
+    "/Users/fz3hra/.nuget/packages/system.commandline/2.0.0-beta7.25380.108/system.commandline.2.0.0-beta7.25380.108.nupkg.sha512"
+  ],
   "logs": []
 }
