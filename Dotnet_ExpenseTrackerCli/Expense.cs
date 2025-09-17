@@ -4,12 +4,12 @@ public class Expense
 {
     public int Id { get; set; }
     public string Name { get; set; }
-    public DateTime Date { get; set; }
+    public string Date { get; set; }
     public decimal Amount { get; set; }
     
     public Expense(){}
 
-    public Expense(int id, string expenseName, DateTime date, decimal amount)
+    public Expense(int id, string expenseName, string date, decimal amount)
     {
         this.Id = id;
         this.Name = expenseName;

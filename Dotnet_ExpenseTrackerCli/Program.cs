@@ -1,6 +1,7 @@
 ﻿// See https://aka.ms/new-console-template for more information
 
 using System.CommandLine;
+using System.Globalization;
 using System.Text.Json;
 using Dotnet_ExpenseTrackerCli;
 
@@ -48,7 +49,19 @@ static class Program
         Option<decimal> amountOption = new("--amount")
         {
             Description = "amount for expenses",
-            Required = true,
+            Required = false,
+        };
+        
+        Option<int?> filterMonthOption = new("--month")
+        {
+            Description = "filter expenses for month",
+            Required = false,
+        };
+        
+        Option<int?> filterYearOption = new("--year")
+        {
+            Description = "filter expenses for year; it defaults to current year unless otherwise",
+            Required = false,
         };
         
         // arguments that will be passed
@@ -74,6 +87,7 @@ static class Program
         
         Command updateCommand = new("update", "update expenses list");
         rootCommand.Aliases.Add("edit");
+        updateCommand.Options.Add(idOption);
         updateCommand.Options.Add(nameOption);
         updateCommand.Options.Add(amountOption);
         rootCommand.Subcommands.Add(updateCommand);
@@ -85,6 +99,11 @@ static class Program
         
         Command clearCommand = new("clear", "clear expenses list");
         rootCommand.Subcommands.Add(clearCommand);
+        
+        Command summaryCommand = new("summary", "summary expenses list");
+        summaryCommand.Options.Add(filterMonthOption);
+        summaryCommand.Options.Add(filterYearOption);
+        rootCommand.Subcommands.Add(summaryCommand);
         
         readCommand.SetAction(result => ReadExpenses(
                 result.GetValue(fileOption)
@@ -115,6 +134,14 @@ static class Program
         
         clearCommand.SetAction(result => ClearExpenses(
                 result.GetValue(fileOption)
+            )
+        );
+        
+        summaryCommand.SetAction(result => TotalExpenses(
+                result.GetValue(fileOption),
+                result.GetValue(filterMonthOption),
+                
+                result.GetValue(filterYearOption)
             )
         );
             
@@ -148,8 +175,8 @@ static class Program
     private static void CreateExpense(FileInfo files, string expenseName, decimal expenseAmount)
     {
         var items = LoadExpensesJson(files);
-        var id = items.Count ==0 ? 1 : items.Max(item => item.Id +1);
-        items.Add(new Expense(id, expenseName, DateTime.Now, expenseAmount));
+        var id = items.Count ==0 ? 1 : items.Max(item => item.Id) + 1;
+        items.Add(new Expense(id, expenseName, DateTime.Now.ToString("yyyy-MM-dd")	, expenseAmount));
         SaveExpensesJson(files, items);
     }
 
@@ -182,5 +209,34 @@ static class Program
         var items = LoadExpensesJson(file);
         items.Clear();
         SaveExpensesJson(file, items);
+    }
+
+    // summary of all expenses + filter by month or year if needed [if filter month or year added]
+    private static void TotalExpenses(FileInfo file, int? month, int? year)
+    {
+        decimal sum = 0;
+        var items = LoadExpensesJson(file);
+        
+        if (month is null && year is null)
+        {
+            sum = items.Sum(item => item.Amount);
+            Console.WriteLine($"Total expenses for current year: {sum}");
+        }
+        else if (month != null)
+        {
+            year ??= DateTime.Now.Year;
+            var matched = items.Where(e =>
+            {
+                if (!DateTime.TryParseExact(e.Date, "yyyy-MM-dd",
+                        CultureInfo.InvariantCulture, DateTimeStyles.None, out var dt))
+                {
+                    return false; 
+                }
+                return dt.Year == year && dt.Month == month;
+            });
+     
+            sum = matched.Sum(e => e.Amount);
+            Console.WriteLine($"Total expenses for month {month} of year {year}: {sum}");
+        }
     }
 }
