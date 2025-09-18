@@ -4,7 +4,7 @@ public class Expense
 {
     public int Id { get; set; }
     public string Name { get; set; }
-    public string Date { get; set; }
+    public string Date { get; set; } //date formet: "yyyy-MM-dd"
     public decimal Amount { get; set; }
     
     public Expense(){}
