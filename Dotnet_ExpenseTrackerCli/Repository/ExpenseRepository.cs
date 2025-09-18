@@ -9,6 +9,8 @@ public class ExpenseRepository: IExpenseRepository
     public ExpenseRepository(FileInfo file)
     {
         _file = file;
+        _file.Directory?.Create();
+        if (!_file.Exists) File.WriteAllText(_file.FullName, "[]");
     }
     public List<Expense> Load()
     {

@@ -45,7 +45,8 @@ public class ExpenseService
         var item = items.SingleOrDefault(item => item.Id == id);
         if (item != null)
         {
-            item.Name = expenseName; item.Amount = expenseAmount;
+            item.Name = expenseName; 
+            item.Amount = expenseAmount;
         }
         _expenseRepository.Save(items);
         Console.WriteLine($"Updated task {id}");
