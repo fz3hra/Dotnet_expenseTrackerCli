@@ -3,6 +3,7 @@
 using System.CommandLine;
 using System.Globalization;
 using System.Text.Json;
+using ChoETL;
 using Dotnet_ExpenseTrackerCli;
 
 static class Program
@@ -31,6 +32,13 @@ static class Program
                     return new FileInfo(filePath);
                 }
             }
+        };
+        
+        Option<FileInfo> outCsvOption = new("--out")
+        {
+            Description = "CSV output file",
+            Required = false,
+            DefaultValueFactory = _ => new FileInfo("expenses.csv")
         };
         
         Option<int> idOption = new("--id")
@@ -64,16 +72,11 @@ static class Program
             Required = false,
         };
         
-        // arguments that will be passed
-        // var idArgument = new Argument<int>("Id");
-        // var nameArgument = new Argument<string>("Name");
-        // var amountArgument = new Argument<int>("amount");
         
         // commands required
         RootCommand rootCommand = new("dotnet-expense-tracker");
         fileOption.Recursive = true;
         rootCommand.Options.Add(fileOption);
-
         
         Command readCommand = new("read", "read expenses list");
         rootCommand.Subcommands.Add(readCommand);
@@ -92,7 +95,7 @@ static class Program
         updateCommand.Options.Add(amountOption);
         rootCommand.Subcommands.Add(updateCommand);
         
-        Command deleteCommand = new("delete", "update expenses list");
+        Command deleteCommand = new("delete", "delete expense in a list");
         rootCommand.Aliases.Add("remove");
         deleteCommand.Options.Add(idOption);
         rootCommand.Subcommands.Add(deleteCommand);
@@ -105,6 +108,11 @@ static class Program
         summaryCommand.Options.Add(filterYearOption);
         rootCommand.Subcommands.Add(summaryCommand);
         
+        Command exportCsvCommand = new("export-csv", "export expenses list");
+        exportCsvCommand.Options.Add(outCsvOption);
+        rootCommand.Subcommands.Add(exportCsvCommand);
+        
+        //
         readCommand.SetAction(result => ReadExpenses(
                 result.GetValue(fileOption)
             )
@@ -144,12 +152,17 @@ static class Program
                 result.GetValue(filterYearOption)
             )
         );
+        
+        exportCsvCommand.SetAction(result => ExportJsonToCsv(
+            result.GetValue(fileOption),   
+            result.GetValue(outCsvOption) 
+        ));
             
         return rootCommand.Parse(args).Invoke();
     }
     
     // Method for manipulating jSON
-    static List<Expense> LoadExpensesJson(FileInfo file)
+    static List<Expense> LoadExpenses(FileInfo file)
     {
         if(!file.Exists) return new List<Expense>();
         string json = File.ReadAllText(file.FullName);
@@ -157,7 +170,7 @@ static class Program
             (JsonSerializer.Deserialize<List<Expense>>(json) ?? new List<Expense>());
     }
     
-    static void SaveExpensesJson(FileInfo file, List<Expense> items)
+    static void SaveExpenses(FileInfo file, List<Expense> items)
     {
         Console.WriteLine("Serialising expenses list...");
         var json = JsonSerializer.Serialize(items);
@@ -174,69 +187,94 @@ static class Program
 
     private static void CreateExpense(FileInfo files, string expenseName, decimal expenseAmount)
     {
-        var items = LoadExpensesJson(files);
+        var items = LoadExpenses(files);
         var id = items.Count ==0 ? 1 : items.Max(item => item.Id) + 1;
         items.Add(new Expense(id, expenseName, DateTime.Now.ToString("yyyy-MM-dd")	, expenseAmount));
-        SaveExpensesJson(files, items);
+        SaveExpenses(files, items);
     }
 
     private static void DeleteExpense(FileInfo file, int id)
     {
         Console.WriteLine("Deleting task");
-        var items = LoadExpensesJson(file);
+        var items = LoadExpenses(file);
         items.Where(item => item.Id == id).ToList().ForEach(item => items.Remove(item));
         
-        SaveExpensesJson(file, items);
+        SaveExpenses(file, items);
         Console.WriteLine($"Deleted task {id}");
     }
 
     private static void UpdateExpense(FileInfo file, int id, string expenseName, decimal expenseAmount)
     {
         Console.WriteLine("Updating task");
-        var items = LoadExpensesJson(file);
+        var items = LoadExpenses(file);
         var item = items.SingleOrDefault(item => item.Id == id);
         if (item != null)
         {
             item.Name = expenseName; item.Amount = expenseAmount;
         }
-        SaveExpensesJson(file, items);
+        SaveExpenses(file, items);
         Console.WriteLine($"Updated task {id}");
     }
 
     private static void ClearExpenses(FileInfo file)
     {
         Console.WriteLine("Clearing expenses...");
-        var items = LoadExpensesJson(file);
+        var items = LoadExpenses(file);
         items.Clear();
-        SaveExpensesJson(file, items);
+        SaveExpenses(file, items);
     }
 
-    // summary of all expenses + filter by month or year if needed [if filter month or year added]
     private static void TotalExpenses(FileInfo file, int? month, int? year)
     {
-        decimal sum = 0;
-        var items = LoadExpensesJson(file);
-        
-        if (month is null && year is null)
-        {
-            sum = items.Sum(item => item.Amount);
-            Console.WriteLine($"Total expenses for current year: {sum}");
-        }
-        else if (month != null)
+        var items = LoadExpenses(file);
+
+        if (month.HasValue)
         {
             year ??= DateTime.Now.Year;
-            var matched = items.Where(e =>
-            {
-                if (!DateTime.TryParseExact(e.Date, "yyyy-MM-dd",
-                        CultureInfo.InvariantCulture, DateTimeStyles.None, out var dt))
-                {
-                    return false; 
-                }
-                return dt.Year == year && dt.Month == month;
-            });
-     
-            sum = matched.Sum(e => e.Amount);
+            var itemsFiltered = FilterByMonthYear(items, month, year);
+            decimal sum = SumExpenses(itemsFiltered);
             Console.WriteLine($"Total expenses for month {month} of year {year}: {sum}");
         }
+        else
+        {
+            decimal sum = SumExpenses(items);
+            Console.WriteLine($"Total expenses for current year: {sum}");
+        }
+    }
+
+    private static decimal SumExpenses(IEnumerable<Expense> items)
+    {
+        return items.Sum(item => item.Amount);
+    }
+
+    private static IEnumerable<Expense> FilterByMonthYear(List<Expense> items,  int? month, int? year)
+    {
+        var matched = items.Where(e =>
+        {
+            if (!DateTime.TryParseExact(e.Date, "yyyy-MM-dd",
+                    CultureInfo.InvariantCulture, DateTimeStyles.None, out var dt))
+            {
+                return false; 
+            }
+            return dt.Year == year && dt.Month == month;
+        });
+        return matched;
+    }
+
+    private static void ExportJsonToCsv(FileInfo file, FileInfo outCsv)
+    {
+        var items = LoadExpenses(file);
+        
+        if(outCsv.Directory is not null) Directory.CreateDirectory(outCsv.DirectoryName);
+        
+        var writer = new StreamWriter(outCsv.FullName);
+        
+        using (var w = new ChoCSVWriter<Expense>(writer)
+                       .WithFirstLineHeader())
+            {
+                w.Write(items);
+                Console.WriteLine($"Exported {items.Count} expenses to {outCsv.FullName}");
+
+            }
     }
 }
